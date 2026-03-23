@@ -6,9 +6,6 @@ import io
 import json
 import sys
 
-from .cli import build_arg_parser, find_session_file
-
-
 # Ensure stdout handles Unicode on Windows
 if sys.platform == "win32":
     sys.stdout = io.TextIOWrapper(
@@ -17,6 +14,8 @@ if sys.platform == "win32":
     sys.stderr = io.TextIOWrapper(
         sys.stderr.buffer, encoding="utf-8", errors="replace"
     )
+
+from .cli import build_arg_parser, find_session_file
 from .parser import filter_messages, parse_session_file
 from .tree import build_tree, tree_stats
 
@@ -50,48 +49,70 @@ def main() -> int:
     roots = build_tree(messages)
     stats = tree_stats(roots)
 
+    # --stats: print JSON stats and exit
     if args.stats:
         print(json.dumps(stats, indent=2))
         return 0
 
-    # For now, print stats until TUI is implemented (Wave 2)
-    print(f"Session: {session_file.stem}")
-    print(f"Messages: {stats['total_nodes']} "
-          f"({stats['user_messages']} user, {stats['assistant_messages']} assistant)")
-    print(f"Sidechains: {stats['sidechain_nodes']}")
-    print(f"Max depth: {stats['max_depth']}")
-    print(f"Roots: {stats['root_count']}")
-    print()
-    print("Tree preview:")
-    _print_tree(roots)
-    print()
-    print("[TUI not yet implemented — coming in Wave 2]")
+    # Determine session ID from first entry or filename
+    session_id = args.session_id
+    if not session_id and messages:
+        session_id = messages[0].get("sessionId", session_file.stem)
+
+    # Launch TUI
+    from .renderer import ActionResult, CCTreeApp
+
+    app = CCTreeApp(
+        roots=roots,
+        session_id=session_id,
+        session_file=str(session_file),
+    )
+    result: ActionResult | None = app.run()
+
+    # Handle result
+    if result is None or result.action == "cancel":
+        return 0
+
+    # Output action JSON
+    output = {
+        "action": result.action,
+        "node_uuid": result.node_uuid,
+        "session_id": result.session_id,
+        "session_file": result.session_file,
+    }
+
+    if args.output_only:
+        # Skill integration mode: output JSON only
+        print(json.dumps(output))
+    else:
+        # Standalone mode: execute the action directly
+        if result.action == "fork":
+            print(f"\nFork requested from node: {result.node_uuid}")
+            print("Executing fork...")
+            from .actions import fork_session
+
+            new_path = fork_session(session_file, result.node_uuid)
+            if new_path:
+                print(f"New session created: {new_path}")
+                print(f"Resume with: claude --resume {new_path.stem}")
+            else:
+                print("Fork failed.", file=sys.stderr)
+                return 1
+
+        elif result.action == "overwrite":
+            print(f"\nOverwrite requested from node: {result.node_uuid}")
+            print("Executing overwrite...")
+            from .actions import overwrite_session
+
+            backup_path = overwrite_session(session_file, result.node_uuid)
+            if backup_path:
+                print(f"Backup created: {backup_path}")
+                print(f"Session truncated. Resume with: claude --resume {session_file.stem}")
+            else:
+                print("Overwrite failed.", file=sys.stderr)
+                return 1
+
     return 0
-
-
-def _print_tree(
-    roots: list,
-    prefix: str = "",
-    is_last: bool = True,
-    is_root: bool = True,
-) -> None:
-    """Print an ASCII tree preview for verification."""
-    for i, node in enumerate(roots):
-        last = i == len(roots) - 1
-        if is_root:
-            connector = ""
-            child_prefix = ""
-        else:
-            connector = "└─" if last else "├─"
-            child_prefix = prefix + ("  " if last else "│ ")
-
-        label = node.display_label
-        if node.is_sidechain and not node.expanded:
-            label += " [collapsed]"
-        print(f"{prefix}{connector}{label}")
-
-        if node.children and node.expanded:
-            _print_tree(node.children, child_prefix, last, is_root=False)
 
 
 if __name__ == "__main__":
