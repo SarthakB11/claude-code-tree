@@ -26,7 +26,9 @@ def main() -> int:
 
     # Resolve session file
     session_file = args.session_file
-    if not session_file:
+    if session_file:
+        session_file = session_file.expanduser()
+    else:
         session_file = find_session_file(session_id=args.session_id)
 
     if not session_file or not session_file.is_file():
