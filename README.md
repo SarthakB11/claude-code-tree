@@ -1,53 +1,60 @@
 # cctree — Claude Code Conversation Tree Navigator
 
-An interactive terminal UI for navigating Claude Code conversations as a tree. Fork new branches or rewind to any point in your conversation history.
+Visualize Claude Code conversations as a tree. Fork new branches or rewind to any point in your history.
 
 ## The Problem
 
-Claude Code conversations are linear and hard to navigate. When a conversation takes a wrong turn, there's no way to:
-- **See** your conversation structure at a glance
-- **Navigate** to a specific past message
-- **Fork** a new branch from any point to explore alternatives
-- **Rewind** by truncating everything after a chosen message
-
-The existing `/fork` and `--fork-session` are blind — no visual tree, no keyboard navigation, no "fork vs rewind" choice.
+Claude Code conversations are linear. When a conversation takes a wrong turn, there's no way to see the structure, navigate to a past message, or branch off to explore an alternative. The built-in `/fork` and `/rewind` work but are blind — no visual tree, no context.
 
 ## What This Does
 
-```
-/tree                          # launch tree for current session
-/tree --session <session-id>   # launch tree for a specific session
-python -m cctree --help        # standalone CLI usage
-```
+### Inside Claude Code (inline mode)
+
+Type `/tree` in any Claude Code session:
 
 ```
-  [U] You: "I want to create a CLI extension..."
-  └─[A] Claude: "Let me look up that repository..."
-    └─[U] You: "Now here's my idea..."
-      ├─[A] Claude: "Great idea. Let me scan..."     <-- you are here
-      │ └─[U] You: "I prefer CLI..."
-      └─[S] Subagent: "Explored session storage..." [expand]
+/tree
+
+Session: 19aac04e-...
+Messages: 20 (10 user, 10 assistant)
+
+  1. [U] You: I want to build a REST API for a todo app...     (uuid:u1)
+  2. [A] Claude: I'd recommend Python+FastAPI or Node+Express...  (uuid:a1)
+  3. [U] You: Let's go with Python + FastAPI                     (uuid:u2)
+  4. [A] Claude: Let me set up the project structure...           (uuid:a2)
+  ...
+  8. [A] Claude: Basic CRUD API is ready...                       (uuid:a4)  <-- fork here?
+  9. [S] Subagent: Database research... [+collapsed]              (uuid:s1)
+ 10. [U] You: Add JWT auth first                                  (uuid:u5)
+  ...
+
+> "fork from 8"
+> Fork created! Switch with: /resume <new-session-id>
 ```
 
-### Keyboard Controls
+- Claude renders the tree inline, you pick a node by number or content
+- **Fork**: creates a new session, switch with `/resume <id>`
+- **Rewind**: Claude tells you to use built-in `/rewind` (handles code restoration too)
+
+### Standalone TUI (terminal mode)
+
+Full interactive keyboard-driven tree navigator:
+
+```bash
+python -m cctree --session-file path/to/session.jsonl
+```
 
 | Key | Action |
 |-----|--------|
-| `↑` `↓` / `j` `k` | Navigate between nodes |
-| `←` `→` / `h` `l` | Collapse/expand, move to parent/child |
+| `↑↓` / `jk` | Navigate between nodes |
+| `←→` / `hl` | Collapse/expand, parent/child |
 | `Enter` | Open action menu |
-| `f` | Fork new branch from selected message |
-| `o` | Overwrite (truncate after selected message) |
+| `f` | Fork from selected message |
+| `o` | Overwrite (truncate after selected) |
 | `Space` | Toggle expand/collapse |
 | `q` / `Esc` | Quit |
 
-### Features
-
-- Color-coded nodes: cyan (user), green (assistant), yellow (sidechains)
-- Sidechains collapsed by default with one-liner summaries
-- Overwrite confirmation with descendant count
-- Automatic backup before destructive operations
-- `--output-only` mode for Claude Code skill integration
+Color-coded: cyan (user), green (assistant), yellow (sidechains). Fork and overwrite execute inside the TUI with result notification before exit.
 
 ## Installation
 
@@ -57,95 +64,92 @@ cd claude-code-tree
 ./install.sh
 ```
 
-The install script:
-1. Checks Python 3.10+ is available
-2. Installs Textual dependency
-3. Symlinks `/tree` command into `~/.claude/commands/`
-4. Symlinks conversation-tree skill into `~/.claude/skills/`
-5. Symlinks cctree package into `~/.claude/scripts/`
+The install script copies the `/tree` command, skill, and cctree package into `~/.claude/`. Verify with `./install.sh --check`. Remove with `./install.sh --uninstall`.
 
-Verify with `./install.sh --check`. Uninstall with `./install.sh --uninstall`.
+Requires Python 3.10+ and [Textual](https://textual.textualize.io/).
 
-## Standalone Usage
-
-Works independently of Claude Code:
+## CLI Reference
 
 ```bash
-# View tree stats
-python -m cctree --session-file path/to/session.jsonl --stats
+# Inline tree (for Claude Code skill integration)
+python -m cctree --render-text --session-file <path>
 
-# Launch interactive TUI
-python -m cctree --session-file path/to/session.jsonl
+# Non-interactive fork
+python -m cctree --fork <node-uuid> --session-file <path>
+
+# Non-interactive overwrite
+python -m cctree --overwrite <node-uuid> --session-file <path>
+
+# Tree statistics (JSON)
+python -m cctree --stats --session-file <path>
+
+# Interactive TUI
+python -m cctree --session-file <path>
 
 # Auto-detect current session
 python -m cctree
-
-# Output action JSON (for scripting)
-python -m cctree --output-only
 ```
 
 ## Architecture
 
 ```
-/tree command ──> Skill (orchestrator) ──> python -m cctree (TUI)
-                                                  │
-                                           Action JSON on exit
-                                                  │
-                                                  v
-                                      Fork: new session JSONL
-                                      Overwrite: backup + truncate
+/tree (Claude Code)           Standalone TUI
+      |                             |
+      v                             v
+  Skill renders tree         Textual interactive app
+  inline in conversation     with keyboard navigation
+      |                             |
+      v                             v
+  python -m cctree           python -m cctree
+  --render-text / --fork     (default TUI mode)
+      |                             |
+      +----------+------------------+
+                 |
+                 v
+        cctree Python package
+        parser.py  - JSONL parsing, content filtering
+        tree.py    - Tree data structure, node operations
+        actions.py - Fork (new session) & overwrite (backup + truncate)
+        cli.py     - Arg parsing, session auto-detection
 ```
-
-Three-layer design:
-
-1. **Slash Command** (`/tree`) — entry point registered in Claude Code
-2. **Skill** (orchestrator) — resolves session, invokes TUI, processes result
-3. **Python TUI** (`cctree`) — standalone Textual app, returns decision as JSON
-
-The TUI is read-only. All JSONL manipulation (fork/truncate) happens in the action layer.
 
 ## Project Structure
 
 ```
 cctree/
-  __init__.py       # Package version
-  __main__.py       # Entry point (python -m cctree)
-  cli.py            # Argument parsing, session discovery
-  parser.py         # JSONL parsing, content preview extraction
-  tree.py           # Tree data structure, node operations
-  renderer.py       # Textual TUI (tree widget, modals, keybindings)
-  actions.py        # Fork and overwrite operations
+  __init__.py              # Package version
+  __main__.py              # Entry point
+  cli.py                   # Argument parsing, session discovery
+  parser.py                # JSONL parsing, conversation turn filtering
+  tree.py                  # Tree data structure, node operations
+  renderer.py              # Textual TUI (tree widget, modals, keybindings)
+  actions.py               # Fork and overwrite with advisory locking
 commands/
-  tree.md           # Claude Code slash command definition
+  tree.md                  # Claude Code slash command
 skills/
   conversation-tree/
-    SKILL.md        # Claude Code skill definition
-tests/
-  test_parser.py    # 17 tests
-  test_tree.py      # 22 tests
-  test_actions.py   # 13 tests
+    SKILL.md               # Claude Code skill definition
+tests/                     # 72 tests
+  test_parser.py           # Parser, content preview, filtering
+  test_tree.py             # Tree builder, nodes, traversal
+  test_actions.py          # Fork, overwrite, backup integrity
+  test_conversation_turns.py  # Compact filtering, CLI modes, edge cases
   fixtures/
-    sample_session.jsonl
+    sample_session.jsonl   # Test fixture with sidechains and branches
 ```
 
-## Requirements
+## How It Works
 
-- Python 3.10+
-- [Textual](https://textual.textualize.io/) >= 0.50.0
-- Claude Code CLI (for `/tree` slash command integration)
+Claude Code stores conversations as JSONL with `uuid` / `parentUuid` fields forming a natural tree:
 
-## Project Status
+```jsonl
+{"uuid": "abc", "parentUuid": null,  "type": "user",      "message": {"role": "user", "content": "..."}}
+{"uuid": "def", "parentUuid": "abc", "type": "assistant",  "message": {"role": "assistant", "content": "..."}}
+```
 
-| Phase | Status |
-|-------|--------|
-| Specification | Done |
-| Design | Done |
-| Implementation Plan | Done |
-| Core Data Layer (Wave 1) | Done |
-| Terminal UI (Wave 2) | Done |
-| Fork & Overwrite (Wave 3) | Done |
-| Claude Code Integration (Wave 4) | Done |
-| Polish & Validation (Wave 5) | In Progress |
+cctree reads this structure, filters to meaningful conversation turns (skipping tool_use/tool_result noise), builds the tree, and lets you navigate and branch from any point.
+
+**Fork** creates a new JSONL with the ancestor chain up to the selected node. **Overwrite** creates a timestamped backup, then truncates the JSONL.
 
 ## License
 

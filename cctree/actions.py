@@ -3,13 +3,55 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
+import sys
 import uuid as uuid_mod
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
 from .parser import filter_messages, parse_session_file
 from .tree import build_tree, find_node, get_ancestor_uuids
+
+
+@contextmanager
+def _advisory_lock(path: Path):
+    """Cross-platform advisory file lock for destructive operations.
+
+    On Unix, uses fcntl.flock. On Windows, uses msvcrt.locking.
+    If locking is unavailable, proceeds without it (best-effort).
+    """
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    lock_fd = None
+    try:
+        lock_fd = open(lock_path, "w")
+        if sys.platform == "win32":
+            import msvcrt
+            msvcrt.locking(lock_fd.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        yield
+    except (OSError, ImportError):
+        # Lock unavailable — proceed without it (best-effort)
+        yield
+    finally:
+        if lock_fd:
+            try:
+                if sys.platform == "win32":
+                    import msvcrt
+                    msvcrt.locking(lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
+            except (OSError, ImportError):
+                pass
+            lock_fd.close()
+            try:
+                lock_path.unlink()
+            except OSError:
+                pass
 
 
 def fork_session(session_file: Path, node_uuid: str) -> Path | None:
@@ -124,9 +166,10 @@ def overwrite_session(session_file: Path, node_uuid: str) -> Path | None:
     if not keep_entries:
         return None
 
-    # Write filtered entries back to original file
-    with open(session_file, "w", encoding="utf-8") as f:
-        for entry in keep_entries:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    # Write filtered entries back to original file (with advisory lock)
+    with _advisory_lock(session_file):
+        with open(session_file, "w", encoding="utf-8") as f:
+            for entry in keep_entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
     return backup_path

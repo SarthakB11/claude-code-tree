@@ -128,6 +128,10 @@ def extract_content_preview(message: dict[str, Any], max_length: int = 80) -> st
                         parts.append("[tool result]")
                 elif block.get("type") == "thinking":
                     continue  # Skip thinking blocks from preview
+                elif block.get("type") == "image":
+                    parts.append("[image]")
+                elif block.get("type") in ("image_url", "base64"):
+                    parts.append("[image]")
         text = " ".join(parts)
     else:
         text = str(content)
