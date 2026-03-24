@@ -173,14 +173,16 @@ class TestRenderTextCLI:
         assert "No conversation messages" in result.stderr
 
 
-class TestForkCLI:
-    @pytest.fixture
-    def session_copy(self, tmp_path):
-        src = FIXTURES / "sample_session.jsonl"
-        dst = tmp_path / "test.jsonl"
-        shutil.copy2(src, dst)
-        return dst
+@pytest.fixture
+def session_copy(tmp_path):
+    """Copy sample fixture to tmp_path for tests that modify the session."""
+    src = FIXTURES / "sample_session.jsonl"
+    dst = tmp_path / "test.jsonl"
+    shutil.copy2(src, dst)
+    return dst
 
+
+class TestForkCLI:
     def test_fork_outputs_json(self, session_copy):
         result = subprocess.run(
             CCTREE + ["--fork", "msg-008", "--session-file", str(session_copy)],
@@ -203,13 +205,6 @@ class TestForkCLI:
 
 
 class TestOverwriteCLI:
-    @pytest.fixture
-    def session_copy(self, tmp_path):
-        src = FIXTURES / "sample_session.jsonl"
-        dst = tmp_path / "test.jsonl"
-        shutil.copy2(src, dst)
-        return dst
-
     def test_overwrite_outputs_json(self, session_copy):
         result = subprocess.run(
             CCTREE + ["--overwrite", "msg-008", "--session-file", str(session_copy)],

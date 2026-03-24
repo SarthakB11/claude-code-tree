@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import sys
 import uuid as uuid_mod
@@ -19,39 +18,34 @@ from .tree import build_tree, find_node, get_ancestor_uuids
 def _advisory_lock(path: Path):
     """Cross-platform advisory file lock for destructive operations.
 
-    On Unix, uses fcntl.flock. On Windows, uses msvcrt.locking.
-    If locking is unavailable, proceeds without it (best-effort).
+    Locks the target file directly (no separate .lock file) to avoid
+    stale lock files after crashes. Best-effort: proceeds without
+    locking if the platform doesn't support it.
     """
-    lock_path = path.with_suffix(path.suffix + ".lock")
-    lock_fd = None
+    fd = None
     try:
-        lock_fd = open(lock_path, "w")
+        fd = open(path, "a")  # open in append to avoid truncation
         if sys.platform == "win32":
             import msvcrt
-            msvcrt.locking(lock_fd.fileno(), msvcrt.LK_NBLCK, 1)
+            msvcrt.locking(fd.fileno(), msvcrt.LK_NBLCK, 1)
         else:
             import fcntl
-            fcntl.flock(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         yield
     except (OSError, ImportError):
-        # Lock unavailable — proceed without it (best-effort)
         yield
     finally:
-        if lock_fd:
+        if fd:
             try:
                 if sys.platform == "win32":
                     import msvcrt
-                    msvcrt.locking(lock_fd.fileno(), msvcrt.LK_UNLCK, 1)
+                    msvcrt.locking(fd.fileno(), msvcrt.LK_UNLCK, 1)
                 else:
                     import fcntl
-                    fcntl.flock(lock_fd, fcntl.LOCK_UN)
+                    fcntl.flock(fd, fcntl.LOCK_UN)
             except (OSError, ImportError):
                 pass
-            lock_fd.close()
-            try:
-                lock_path.unlink()
-            except OSError:
-                pass
+            fd.close()
 
 
 def fork_session(session_file: Path, node_uuid: str) -> Path | None:
