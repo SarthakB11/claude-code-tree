@@ -33,6 +33,23 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print tree statistics and exit (no TUI)",
     )
+    parser.add_argument(
+        "--render-text",
+        action="store_true",
+        help="Render numbered tree as text and exit (for inline display in Claude Code)",
+    )
+    parser.add_argument(
+        "--fork",
+        type=str,
+        metavar="NODE_UUID",
+        help="Fork session at the given node UUID (non-interactive)",
+    )
+    parser.add_argument(
+        "--overwrite",
+        type=str,
+        metavar="NODE_UUID",
+        help="Overwrite (truncate) session at the given node UUID (non-interactive)",
+    )
     return parser
 
 
