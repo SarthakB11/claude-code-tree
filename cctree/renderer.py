@@ -119,10 +119,10 @@ class ActionMenuScreen(ModalScreen[str]):
 
     def compose(self) -> ComposeResult:
         role = "You" if self.node.role == "user" else "Claude"
-        preview = self.node.content_preview[:60]
+        preview = self.node.content_preview[:60].replace("[", "\\[")
         with Container(id="action-dialog"):
             yield Label("Action on this message:", id="action-title")
-            yield Label(f"{role}: {preview!r}", id="action-preview")
+            yield Label(f"{role}: {preview}", id="action-preview")
             yield Static("")
             yield Static("[bold $accent]f[/]  Fork new branch from here", classes="action-option")
             yield Static("[bold $accent]o[/]  Overwrite — remove all messages after this", classes="action-option")
@@ -220,12 +220,13 @@ class NodeDetail(Static):
             role = f"Subagent ({node.sidechain_slug})"
 
         ts = node.timestamp.strftime("%Y-%m-%d %H:%M:%S") if node.timestamp else "?"
-        preview = node.content_preview[:120]
-        sidechain_tag = " [yellow][sidechain][/yellow]" if node.is_sidechain else ""
+        # Escape Rich markup characters in user content to prevent MarkupError
+        preview = node.content_preview[:120].replace("[", "\\[")
+        sidechain_tag = " [yellow]\\[sidechain][/yellow]" if node.is_sidechain else ""
 
         self.update(
             f"[bold]{role}[/bold]{sidechain_tag}  {ts}\n"
-            f"{preview!r}\n"
+            f"{preview}\n"
             f"[dim]Enter: action menu  f: fork  o: overwrite  q: quit[/dim]"
         )
 
