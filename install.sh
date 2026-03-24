@@ -117,31 +117,29 @@ mkdir -p "${CLAUDE_DIR}/commands"
 mkdir -p "${CLAUDE_DIR}/skills"
 mkdir -p "${CLAUDE_DIR}/scripts"
 
-# Helper: create or update symlink
-link_item() {
+# Helper: copy item (symlinks don't work reliably on Windows Git Bash)
+copy_item() {
     local source="$1"
     local target="$2"
     local label="$3"
 
-    if [ -L "$target" ]; then
-        rm "$target"
-    elif [ -e "$target" ]; then
-        echo -e "  ${YELLOW}Warning${NC}: $target exists and is not a symlink. Skipping."
-        return
+    if [ -d "$source" ]; then
+        rm -rf "$target" 2>/dev/null
+        cp -r "$source" "$target"
+    else
+        cp -f "$source" "$target"
     fi
-
-    ln -s "$source" "$target"
-    echo -e "  ${GREEN}Linked${NC}  $label"
+    echo -e "  ${GREEN}Installed${NC}  $label"
 }
 
 # Symlink command
-link_item "${SCRIPT_DIR}/commands/tree.md" "${CLAUDE_DIR}/commands/tree.md" "commands/tree.md"
+copy_item "${SCRIPT_DIR}/commands/tree.md" "${CLAUDE_DIR}/commands/tree.md" "commands/tree.md"
 
 # Symlink skill
-link_item "${SCRIPT_DIR}/skills/conversation-tree" "${CLAUDE_DIR}/skills/conversation-tree" "skills/conversation-tree/"
+copy_item "${SCRIPT_DIR}/skills/conversation-tree" "${CLAUDE_DIR}/skills/conversation-tree" "skills/conversation-tree/"
 
 # Symlink cctree package
-link_item "${SCRIPT_DIR}/cctree" "${CLAUDE_DIR}/scripts/cctree" "scripts/cctree/"
+copy_item "${SCRIPT_DIR}/cctree" "${CLAUDE_DIR}/scripts/cctree" "scripts/cctree/"
 
 # Install Python dependencies
 echo ""

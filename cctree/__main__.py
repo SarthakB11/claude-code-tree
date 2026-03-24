@@ -16,7 +16,7 @@ if sys.platform == "win32":
     )
 
 from .cli import build_arg_parser, find_session_file
-from .parser import filter_messages, parse_session_file
+from .parser import filter_conversation_turns, filter_messages, parse_session_file
 from .tree import TreeNode, build_tree, find_node, tree_stats
 
 
@@ -61,9 +61,12 @@ def main() -> int:
         print(json.dumps(stats, indent=2))
         return 0
 
-    # --render-text: print numbered tree for inline display
+    # --render-text: print compact numbered tree for inline display
     if args.render_text:
-        _render_text_tree(roots, stats, session_id)
+        compact_messages = filter_conversation_turns(entries)
+        compact_roots = build_tree(compact_messages)
+        compact_stats = tree_stats(compact_roots)
+        _render_text_tree(compact_roots, compact_stats, session_id)
         return 0
 
     # --fork: non-interactive fork
