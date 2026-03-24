@@ -75,44 +75,15 @@ def main() -> int:
     if result is None or result.action == "cancel":
         return 0
 
-    # Output action JSON
-    output = {
-        "action": result.action,
-        "node_uuid": result.node_uuid,
-        "session_id": result.session_id,
-        "session_file": result.session_file,
-    }
-
+    # Output action JSON (actions are already executed inside the TUI)
     if args.output_only:
-        # Skill integration mode: output JSON only
+        output = {
+            "action": result.action,
+            "node_uuid": result.node_uuid,
+            "session_id": result.session_id,
+            "session_file": result.session_file,
+        }
         print(json.dumps(output))
-    else:
-        # Standalone mode: execute the action directly
-        if result.action == "fork":
-            print(f"\nFork requested from node: {result.node_uuid}")
-            print("Executing fork...")
-            from .actions import fork_session
-
-            new_path = fork_session(session_file, result.node_uuid)
-            if new_path:
-                print(f"New session created: {new_path}")
-                print(f"Resume with: claude --resume {new_path.stem}")
-            else:
-                print("Fork failed.", file=sys.stderr)
-                return 1
-
-        elif result.action == "overwrite":
-            print(f"\nOverwrite requested from node: {result.node_uuid}")
-            print("Executing overwrite...")
-            from .actions import overwrite_session
-
-            backup_path = overwrite_session(session_file, result.node_uuid)
-            if backup_path:
-                print(f"Backup created: {backup_path}")
-                print(f"Session truncated. Resume with: claude --resume {session_file.stem}")
-            else:
-                print("Overwrite failed.", file=sys.stderr)
-                return 1
 
     return 0
 

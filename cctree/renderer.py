@@ -194,6 +194,62 @@ class ConfirmOverwriteScreen(ModalScreen[bool]):
 
 
 # ---------------------------------------------------------------------------
+# Result notification (shown before exit)
+# ---------------------------------------------------------------------------
+
+class ResultNotificationScreen(ModalScreen[bool]):
+    """Shows the result of a fork/overwrite before the TUI exits."""
+
+    DEFAULT_CSS = """
+    ResultNotificationScreen {
+        align: center middle;
+    }
+
+    #result-dialog {
+        width: 65;
+        height: auto;
+        max-height: 14;
+        border: thick $success;
+        background: $surface;
+        padding: 1 2;
+    }
+
+    #result-title {
+        text-style: bold;
+        color: $success;
+        margin-bottom: 1;
+    }
+
+    #result-hint {
+        color: $text-muted;
+        margin-top: 1;
+    }
+    """
+
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("enter,escape,q", "dismiss_result", "OK", show=True),
+    ]
+
+    def __init__(self, title: str, body: str, hint: str = "") -> None:
+        super().__init__()
+        self._title = title
+        self._body = body
+        self._hint = hint
+
+    def compose(self) -> ComposeResult:
+        with Container(id="result-dialog"):
+            yield Label(self._title, id="result-title")
+            yield Static(self._body)
+            if self._hint:
+                yield Static(self._hint, id="result-hint")
+            yield Static("")
+            yield Static("[dim]Press Enter to exit[/dim]")
+
+    def action_dismiss_result(self) -> None:
+        self.dismiss(True)
+
+
+# ---------------------------------------------------------------------------
 # Detail panel
 # ---------------------------------------------------------------------------
 
@@ -384,17 +440,68 @@ class CCTreeApp(App[ActionResult]):
         self.push_screen(ActionMenuScreen(node), callback=on_result)
 
     def _do_fork(self, node: CCTreeNode) -> None:
-        self.exit(ActionResult("fork", node.uuid, self.session_id, self.session_file))
+        from .actions import fork_session
+        from pathlib import Path
+
+        session_path = Path(self.session_file) if self.session_file else None
+        if not session_path:
+            return
+
+        new_path = fork_session(session_path, node.uuid)
+        if new_path:
+            result = ActionResult("fork", node.uuid, self.session_id, self.session_file)
+
+            def on_dismiss(_: bool | None) -> None:
+                self.exit(result)
+
+            self.push_screen(
+                ResultNotificationScreen(
+                    title="Fork created successfully",
+                    body=(
+                        f"New session: [bold]{new_path.stem}[/bold]\n"
+                        f"Saved to: {new_path.name}"
+                    ),
+                    hint=f"Resume with:  claude --resume {new_path.stem}",
+                ),
+                callback=on_dismiss,
+            )
+        else:
+            self.notify("Fork failed — node not found", severity="error")
 
     def _do_overwrite(self, node: CCTreeNode) -> None:
-        # Count descendants to show in confirmation
         count = self._count_descendants(node)
 
         def on_confirm(confirmed: bool | None) -> None:
-            if confirmed:
-                self.exit(
-                    ActionResult("overwrite", node.uuid, self.session_id, self.session_file)
+            if not confirmed:
+                return
+
+            from .actions import overwrite_session
+            from pathlib import Path
+
+            session_path = Path(self.session_file) if self.session_file else None
+            if not session_path:
+                return
+
+            backup_path = overwrite_session(session_path, node.uuid)
+            if backup_path:
+                result = ActionResult("overwrite", node.uuid, self.session_id, self.session_file)
+
+                def on_dismiss(_: bool | None) -> None:
+                    self.exit(result)
+
+                self.push_screen(
+                    ResultNotificationScreen(
+                        title="Overwrite complete",
+                        body=(
+                            f"Removed [bold]{count}[/bold] message(s) after selected point.\n"
+                            f"Backup saved: {backup_path.name}"
+                        ),
+                        hint=f"Resume with:  claude --resume {self.session_id}",
+                    ),
+                    callback=on_dismiss,
                 )
+            else:
+                self.notify("Overwrite failed — node not found", severity="error")
 
         self.push_screen(ConfirmOverwriteScreen(count), callback=on_confirm)
 
