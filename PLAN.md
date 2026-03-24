@@ -1,7 +1,7 @@
 # PLAN: Claude Code Conversation Tree Navigator
 
-**Status:** Active
-**Phase:** 2 — Plan (spec -> design -> plan -> implement -> validate -> release)
+**Status:** Completed
+**Phase:** Released (v0.2.0) — All 5 waves done
 **Date:** 2026-03-24
 **Spec:** [SPEC.md](./SPEC.md) | **Design:** [DESIGN.md](./DESIGN.md)
 

@@ -17,13 +17,19 @@ Visualize the current session as a tree. Fork new branches or rewind to any poin
 
 ## Step 1: Show the tree
 
-Run this command to display the numbered conversation tree inline:
+First, find the current session JSONL file:
 
 ```bash
-python -m cctree --render-text --session-file !`ls -t ~/.claude/projects/$(python -c "import os; p=os.getcwd().replace(':\\\\','--').replace('\\\\','-').replace('/','-'); print(p)")/*.jsonl | head -1`
+ls -t ~/.claude/projects/$(python -c "import os; p=os.getcwd().replace(':\\\\','--').replace('\\\\','-').replace('/','-'); print(p)")/*.jsonl | head -1
 ```
 
-Present the tree output to the user. Each node has a number and UUID.
+Then render the tree using the path from the previous command:
+
+```bash
+python -m cctree --render-text --session-file <SESSION_FILE_PATH>
+```
+
+Present the tree output to the user. Each node has a number and a UUID (shown as `uuid:...` at the end of each line).
 
 ## Step 2: Ask the user what to do
 

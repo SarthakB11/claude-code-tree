@@ -1,7 +1,7 @@
 # DESIGN: Claude Code Conversation Tree Navigator
 
-**Status:** Draft
-**Phase:** 1 — Design (spec -> design -> plan -> implement -> validate -> release)
+**Status:** Completed
+**Phase:** Released (v0.2.0)
 **Date:** 2026-03-24
 **Spec:** [SPEC.md](./SPEC.md)
 
