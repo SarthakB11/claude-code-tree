@@ -10,29 +10,42 @@ Launch an interactive tree view of the current conversation session. Navigate wi
 
 ## Instructions
 
-### Step 1: Resolve the session
+### Step 1: Resolve the session file
 
-- If the user provided `--session <id>`, use that session ID
-- Otherwise, auto-detect the current session by finding the most recent `.jsonl` file for this project in `~/.claude/projects/`
+- If the user provided `--session <id>`, find the JSONL file for that session ID
+- Otherwise, auto-detect by finding the most recent `.jsonl` file for this project in `~/.claude/projects/`
 
-### Step 2: Launch the TUI
+To find the project directory, convert the current working directory to a Claude Code project ID:
+- Replace `:\` with `--`, then all `\` and `/` with `-`
+- Example: `C:\Users\sarth\Documents\project` becomes `C--Users-sarth-Documents-project`
+- Session files are at: `~/.claude/projects/{projectId}/{sessionId}.jsonl`
 
-Run the cctree TUI tool:
-
+Use Bash to list and find the most recent session file:
 ```bash
-python -m cctree --session-file <path-to-session.jsonl> --output-only
+ls -t ~/.claude/projects/{projectId}/*.jsonl | head -1
 ```
 
-If `--session <id>` was given:
-```bash
-python -m cctree --session-id <id> --output-only
+### Step 2: Ask the user to launch the TUI
+
+IMPORTANT: The TUI requires direct terminal access for keyboard navigation. It CANNOT be launched via the Bash tool (which runs in a pipe without TTY). Instead, present the user with the exact command to run using the `!` prefix.
+
+Tell the user:
+```
+Run this command to open the interactive tree:
+
+! python -m cctree --session-file <resolved-path> --output-only
 ```
 
-The `--output-only` flag ensures the tool outputs a JSON result for you to process.
+Explain the keyboard controls:
+- Arrow keys or `hjkl` to navigate
+- `Enter` for action menu, `f` to fork, `o` to overwrite
+- `q` or `Esc` to quit
 
-### Step 3: Process the result
+The `--output-only` flag makes the TUI print action JSON to stdout on exit, which will appear in this conversation for processing.
 
-The TUI will output JSON like:
+### Step 3: Wait for and process the result
+
+After the user runs the command, the output will appear in the conversation as JSON:
 ```json
 {
   "action": "fork",
@@ -44,13 +57,13 @@ The TUI will output JSON like:
 
 Handle based on `action`:
 
-- **`fork`**: A new session JSONL has been created. Inform the user of the new session ID and suggest they resume it with `claude --resume <new-session-id>`.
-- **`overwrite`**: The session has been truncated with a backup created. Inform the user that messages after the selected point have been removed and a backup was saved.
-- **`cancel`**: User exited without action. No message needed.
+- **`fork`**: A new session JSONL was created. Tell the user the new session ID and that they can resume with `claude --resume <new-session-id>`.
+- **`overwrite`**: The session was truncated with a backup. Tell the user that messages after the selected point were removed, and where the backup was saved.
+- **`cancel`**: User exited without action. Acknowledge briefly.
 
 ### Step 4: Auto-switch (for fork)
 
 If the action was `fork`, suggest the user start a new Claude session with the forked conversation:
 ```
-claude --resume <new-session-id>
+! claude --resume <new-session-id>
 ```
