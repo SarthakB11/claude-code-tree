@@ -75,15 +75,37 @@ def main() -> int:
     if result is None or result.action == "cancel":
         return 0
 
-    # Output action JSON (actions are already executed inside the TUI)
+    # Actions were already executed inside the TUI.
+    # Print the resume command so the user can easily copy-paste it.
     if args.output_only:
         output = {
             "action": result.action,
             "node_uuid": result.node_uuid,
             "session_id": result.session_id,
             "session_file": result.session_file,
+            "new_session_id": getattr(result, "new_session_id", None),
         }
         print(json.dumps(output))
+    else:
+        # Print a clear next-step for the user
+        if result.action == "fork" and hasattr(result, "new_session_id") and result.new_session_id:
+            print(f"\n  To open the forked session, run:")
+            print(f"  claude --resume {result.new_session_id}\n")
+        elif result.action == "fork":
+            # new_session_id not on the tuple — read from the session dir
+            from pathlib import Path
+            session_dir = Path(result.session_file).parent if result.session_file else None
+            if session_dir:
+                # Find the newest JSONL that isn't the current session
+                candidates = sorted(session_dir.glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)
+                for c in candidates:
+                    if c.stem != result.session_id:
+                        print(f"\n  To open the forked session, run:")
+                        print(f"  claude --resume {c.stem}\n")
+                        break
+        elif result.action == "overwrite":
+            print(f"\n  Session truncated. To resume from the new endpoint, run:")
+            print(f"  claude --resume {result.session_id}\n")
 
     return 0
 
